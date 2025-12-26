@@ -67,6 +67,7 @@ interface MatchState {
   setDismissal: (batterIdx: number, type: string, fielder?: string, bowlerName?: string) => void;
   isSecondInnings: boolean;
   setInnings: (isSecond: boolean) => void;
+
 }
 
 // 3. Create the Store
@@ -92,10 +93,11 @@ export const useMatchStore = create<MatchState>((set) => ({
     strikerIdx: batterIdx,
   })),
 
-
+ 
 
   isSecondInnings: false,
-  setInnings: (isSecond) => set({ isSecondInnings: isSecond }),
+   // Inside useMatchStore.ts
+setInnings: (val: boolean) => set({ isSecondInnings: val }),
 
   setDismissal: (batterIdx, type, fielder, bowlerName) => set((state) => {
     const players = [...state.battingPlayers];

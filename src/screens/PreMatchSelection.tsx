@@ -14,17 +14,23 @@ const PreMatchSelection = ({ route, navigation }: any) => {
 
 
 
-  const handleStart = () => {
-    initMatch(battingTeam.players, bowlingTeam.players, selections.striker, selections.nonStriker, selections.bowler);
+ const handleStart = () => {
+  initMatch(
+    battingTeam.players, 
+    bowlingTeam.players, 
+    selections.striker, 
+    selections.nonStriker, 
+    selections.bowler
+  );
 
-    navigation.navigate('ScoringDash', {
-      strikerIdx: selections.striker,
-      nonStrikerIdx: selections.nonStriker,
-      bowlerIdx: selections.bowler,
-      battingTeamName: battingTeam.teamName,
-      totalOvers: route.params?.totalOvers || 5
-    });
-  };
+  navigation.navigate('ScoringDash', {
+    battingTeamName: battingTeam.teamName,
+    // ADD THESE TWO LINES BELOW:
+    battingTeam: battingTeam, 
+    bowlingTeam: bowlingTeam,
+    totalOvers: route.params?.totalOvers
+  });
+};
 
   const PlayerPicker = ({ label, value, type }: { label: string; value: number; type: 'striker' | 'nonStriker' | 'bowler' }) => (
     <View style={styles.pickerContainer}>
