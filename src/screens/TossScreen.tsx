@@ -66,7 +66,7 @@ const styles = StyleSheet.create({
   center: { alignItems: 'center' },
   title: { color: '#FFF', fontSize: 24, marginBottom: 20 },
   row: { flexDirection: 'row', gap: 15 },
-  btn: { backgroundColor: '#1E293B', width: 120 },
+  btn: { backgroundColor: '#10B981', width: 120 },
   winnerText: { color: '#FFD700', fontSize: 22, fontWeight: 'bold', marginBottom: 30 },
   choiceBtn: { backgroundColor: '#10B981', width: 120 }
 });
