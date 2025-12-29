@@ -1,18 +1,20 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Button, Card, Divider, List, Modal, Portal, Provider, RadioButton, Text } from 'react-native-paper';
 import { useMatchStore } from '../store/useMatchStore';
 import { getPlayerDisplayName } from '../utils/utils';
 
 const ScoringDash = ({ route, navigation }: any) => {
   const store = useMatchStore();
-  
+
   // Modal States
   const [extraModal, setExtraModal] = useState<{ visible: boolean, type: 'Wide' | 'NoBall' | null }>({ visible: false, type: null });
   const [extraRuns, setExtraRuns] = useState(0);
   const [wicketModal, setWicketModal] = useState(false);
   const [overEndModal, setOverEndModal] = useState(false);
-  
+  const [fielderMenuVisible, setFielderMenuVisible] = useState(false);
+  const [matchEndModal, setMatchEndModal] = useState(false);
+
   // Selection States
   const [dismissalType, setDismissalType] = useState('Bowled');
   const [selectedFielder, setSelectedFielder] = useState<string>('');
@@ -23,50 +25,29 @@ const ScoringDash = ({ route, navigation }: any) => {
 
   // --- 1. INNINGS & OVER LOGIC ---
   useEffect(() => {
-  const totalOvers = route.params?.totalOvers || 5;
-  const isAllOut = store.wickets >= 10;
-  const isOversFinished = store.balls >= (totalOvers * 6);
+    const totalOvers = route.params?.totalOvers || 5;
+    const isAllOut = store.wickets >= 10;
+    const isOversFinished = store.balls >= (totalOvers * 6);
+    const targetChased = store.isSecondInnings && store.runs > store.firstInningsScore;
+    console.log(`Balls: ${store.balls}, Wickets: ${store.wickets}, AllOut: ${isAllOut}, OversFinished: ${isOversFinished}`);
 
-  if (isAllOut || isOversFinished) {
-    handleInningsEnd();
-    return;
-  }
+    if (isOversFinished || isAllOut || targetChased) {
+      handleInningsEnd();
+      return;
+    }
 
-  // Improved Over End Check
-  if (store.balls > 0 && store.balls % 6 === 0) {
-    // If you are on the web/emulator, alerts can sometimes block state updates.
-    // We use a tiny timeout to ensure the UI is ready.
-    setTimeout(() => {
-      setOverEndModal(true);
-    }, 100);
-  }
-}, [store.balls, store.wickets]);
+    // Improved Over End Check
+    if (store.balls > 0 && store.balls % 6 === 0) {
+      // If you are on the web/emulator, alerts can sometimes block state updates.
+      // We use a tiny timeout to ensure the UI is ready.
+      setTimeout(() => {
+        setOverEndModal(true);
+      }, 100);
+    }
+  }, [store.balls, store.wickets, store.runs]);
 
   const handleInningsEnd = () => {
-    const totalOvers = route.params?.totalOvers || 5;
-
-    if (!store.isSecondInnings) {
-      Alert.alert(
-        "Innings Over",
-        `1st Innings: ${store.runs}/${store.wickets}. Target: ${store.runs + 1}`,
-        [{
-          text: "Start 2nd Innings",
-          onPress: () => {
-            store.setInnings(true);
-            navigation.navigate('PreMatch', {
-              battingTeam: route.params.bowlingTeam,
-              bowlingTeam: route.params.battingTeam,
-              totalOvers: totalOvers,
-              isSecondInnings: true
-            });
-          }
-        }]
-      );
-    } else {
-      Alert.alert("Match Completed!", "Check the final scorecard.", [
-        { text: "View Results", onPress: () => navigation.navigate('FullScorecard') }
-      ]);
-    }
+    setMatchEndModal(true);
   };
 
   // --- 2. HANDLERS ---
@@ -89,7 +70,55 @@ const ScoringDash = ({ route, navigation }: any) => {
     store.setNextBowler(nextBowlerIdx);
     setOverEndModal(false);
   };
+  const getMatchResult = () => {
+    const target = store.firstInningsScore + 1;
+    const secondInningsRuns = store.runs;
 
+    if (secondInningsRuns >= target) {
+      return `${route.params.battingTeamName} won by ${10 - store.wickets} wickets`;
+    } else if (store.balls >= (route.params.totalOvers * 6) || store.wickets >= 10) {
+      return `${route.params.bowlingTeam.teamName} won by ${store.firstInningsScore - store.runs} runs`;
+    }
+    return "Match in Progress";
+  };
+
+  const getPlayerOfTheMatch = () => {
+    // Combine all players from both teams who participated
+    const battingPerformers = store.battingPlayers.map(p => ({
+      name: p.name,
+      score: (p.runs || 0) + (p.wickets || 0) * 25 // if store tracks both on one object
+    }));
+
+    const bowlingPerformers = store.bowlers.map(b => ({
+      name: b.name,
+      score: (b.runsConceded === 0 && b.overs > 0 ? 10 : 0) + (b.wickets || 0) * 25
+    }));
+
+    const allPerformers = [...battingPerformers, ...bowlingPerformers];
+
+    // Find the highest score
+    const pom = allPerformers.reduce((prev, current) =>
+      (prev.score > current.score) ? prev : current
+    );
+
+    return pom.name;
+  };
+  const getRequiredRunRate = () => {
+    const runsNeeded = (store.firstInningsScore + 1) - store.runs;
+    const totalBalls = route.params.totalOvers * 6;
+    const ballsRemaining = totalBalls - store.balls;
+
+    if (ballsRemaining <= 0) return "0.00";
+
+    // (Runs Needed / Balls Remaining) * 6 gives the rate per over
+    const rrr = (runsNeeded / ballsRemaining) * 6;
+    return rrr.toFixed(2);
+  };
+
+  const getCurrentRunRate = () => {
+    if (store.balls === 0) return "0.00";
+    return ((store.runs / store.balls) * 6).toFixed(2);
+  };
   const formatOvers = (balls: number) => `${Math.floor(balls / 6)}.${balls % 6}`;
 
   return (
@@ -115,6 +144,24 @@ const ScoringDash = ({ route, navigation }: any) => {
               </View>
             </View>
           </Card.Content>
+          {store.isSecondInnings && (
+            <View style={styles.targetContainer}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Text style={styles.targetText}>TARGET: {store.firstInningsScore + 1}</Text>
+                <View style={styles.rrrBadge}>
+                  <Text style={styles.rrrText}>RRR: {getRequiredRunRate()}</Text>
+                </View>
+              </View>
+
+              <Text style={styles.needText}>
+                Need {(store.firstInningsScore + 1) - store.runs} runs in {(route.params.totalOvers * 6) - store.balls} balls
+              </Text>
+
+              <View style={{ flexDirection: 'row', marginTop: 4 }}>
+                <Text style={styles.crrText}>CRR: {getCurrentRunRate()}</Text>
+              </View>
+            </View>
+          )}
         </Card>
 
         {/* RECENT BALLS */}
@@ -174,11 +221,39 @@ const ScoringDash = ({ route, navigation }: any) => {
             {(dismissalType === 'Caught' || dismissalType === 'Run Out' || dismissalType === 'Stumped') && (
               <View style={{ marginTop: 10 }}>
                 <Text style={styles.subLabel}>Fielder / WK:</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                  {route.params.bowlingTeam.players.map((f: any, i: number) => (
-                    <Button key={i} mode={selectedFielder === f.name ? "contained" : "outlined"} onPress={() => setSelectedFielder(f.name)} style={{ marginRight: 8 }} compact>{f.name}</Button>
-                  ))}
-                </ScrollView>
+                <Button
+                  mode="outlined"
+                  onPress={() => setFielderMenuVisible(true)}
+                  textColor="#FFF"
+                  style={{ borderColor: '#38BDF8' }}
+                >
+                  {selectedFielder || "Select Fielder"}
+                </Button>
+
+                <Portal>
+                  <Modal
+                    visible={fielderMenuVisible}
+                    onDismiss={() => setFielderMenuVisible(false)}
+                    contentContainerStyle={styles.modalStyle}
+                  >
+                    <Text style={styles.modalTitle}>Select Fielder</Text>
+                    <ScrollView style={{ maxHeight: 300 }}>
+                      {route.params.bowlingTeam.players.map((f: any, i: number) => (
+                        <List.Item
+                          key={i}
+                          title={f.name}
+                          titleStyle={{ color: '#FFF' }}
+                          onPress={() => {
+                            setSelectedFielder(f.name);
+                            setFielderMenuVisible(false);
+                          }}
+                          left={props => <List.Icon {...props} icon="hand-back-right" color="#38BDF8" />}
+                        />
+                      ))}
+                    </ScrollView>
+                    <Button onPress={() => setFielderMenuVisible(false)}>Close</Button>
+                  </Modal>
+                </Portal>
               </View>
             )}
             <Divider style={{ marginVertical: 10, backgroundColor: '#334155' }} />
@@ -210,6 +285,60 @@ const ScoringDash = ({ route, navigation }: any) => {
                 />
               ))}
             </ScrollView>
+          </Modal>
+          {/* Match END MODAL */}
+          <Modal visible={matchEndModal} dismissable={false} contentContainerStyle={styles.modalStyle}>
+            {!store.isSecondInnings ? (
+              // FIRST INNINGS END UI
+              <View style={{ alignItems: 'center' }}>
+                <Text style={styles.modalTitle}>Innings Completed</Text>
+                <Text style={[styles.runsText, { fontSize: 30 }]}>
+                  {store.runs}/{store.wickets}
+                </Text>
+                <Text style={styles.subLabel}>Target: {store.runs + 1} runs</Text>
+
+                <Button
+                  mode="contained"
+                  style={{ marginTop: 20, backgroundColor: '#10B981', width: '100%' }}
+                  onPress={() => {
+                    const totalOvers = route.params?.totalOvers || 5;
+                    store.setInnings(true);
+                    setMatchEndModal(false);
+                    navigation.navigate('PreMatch', {
+                      battingTeam: route.params.bowlingTeam,
+                      bowlingTeam: route.params.battingTeam,
+                      totalOvers: totalOvers,
+                      isSecondInnings: true
+                    });
+                  }}
+                >
+                  START SECOND INNINGS
+                </Button>
+              </View>
+            ) : (
+              // MATCH COMPLETED UI
+              <View style={{ alignItems: 'center' }}>
+                <Text style={[styles.modalTitle, { color: '#F59E0B' }]}>🏆 MATCH FINISHED</Text>
+                <Text style={{ color: '#FFF', fontSize: 20, fontWeight: 'bold', marginVertical: 10 }}>
+                  {getMatchResult()}
+                </Text>
+
+                <View style={{ backgroundColor: '#334155', padding: 15, borderRadius: 10, width: '100%', marginVertical: 10 }}>
+                  <Text style={{ color: '#94A3B8', textAlign: 'center' }}>Player of the Match</Text>
+                  <Text style={{ color: '#38BDF8', fontSize: 22, fontWeight: 'bold', textAlign: 'center' }}>
+                    🌟 {getPlayerOfTheMatch()}
+                  </Text>
+                </View>
+
+                <Button
+                  mode="contained"
+                  style={{ marginTop: 10, width: '100%' }}
+                  onPress={() => navigation.navigate('FullScorecard')}
+                >
+                  VIEW FULL SCORECARD
+                </Button>
+              </View>
+            )}
           </Modal>
         </Portal>
       </View>
@@ -243,7 +372,43 @@ const styles = StyleSheet.create({
   modalRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center' },
   subLabel: { color: '#94A3B8', marginTop: 15, marginBottom: 5, fontWeight: 'bold' },
   radioRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
-  radioItem: { flexDirection: 'row', alignItems: 'center', width: '45%' }
+  radioItem: { flexDirection: 'row', alignItems: 'center', width: '45%' },
+  targetContainer: {
+    backgroundColor: 'rgba(251, 191, 36, 0.1)', // Light yellow transparent bg
+    padding: 8,
+    borderRadius: 8,
+    marginTop: 5,
+    borderLeftWidth: 4,
+    borderLeftColor: '#FBBF24', // Solid yellow accent
+  },
+  targetText: {
+    color: '#FBBF24', // Yellow color
+    fontWeight: 'bold',
+    fontSize: 18,
+  },
+
+  rrrBadge: {
+    backgroundColor: '#FBBF24',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  rrrText: {
+    color: '#0F172A',
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+  needText: {
+    color: '#FFF',
+    fontSize: 14,
+    marginTop: 4,
+    fontWeight: '500'
+  },
+  crrText: {
+    color: '#94A3B8',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
 });
 
 export default ScoringDash;

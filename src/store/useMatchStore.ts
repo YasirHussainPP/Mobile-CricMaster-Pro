@@ -16,6 +16,7 @@ export interface Batter {
   fours: number;
   sixes: number;
   isOut: boolean;
+  wickets: number;
   dismissal: string;
 }
 
@@ -25,15 +26,29 @@ export interface Bowler {
   runsConceded: number;
   wickets: number;
   maidens: number;
+  runs: number;
+  balls: number;
+  fours: number;
+  sixes: number;
+  isOut: boolean;
 }
 
 // 2. Define the Main State Interface
 interface MatchState {
   // Global Match Stats
+  partnerships: { batters: string[], runs: number, balls: number }[];
+  currentPartnership: { runs: number, balls: number };
+  firstInningsScore: number;
+  firstInningsWickets: number;
+  firstInningsBatters: Batter[];
+  firstInningsBowlers: Bowler[];
+  firstInningsBalls: number;  
+  firstInningsExtras: number;
   runs: number;
   wickets: number;
   balls: number;
   overHistory: Ball[];
+  bowlingPlayers: Bowler[];
 
   // Players Data
   battingPlayers: Batter[];
@@ -73,6 +88,15 @@ interface MatchState {
 // 3. Create the Store
 export const useMatchStore = create<MatchState>((set) => ({
   // Initial Values
+  partnerships: [] as { batters: string[], runs: number, balls: number }[],
+  currentPartnership: { runs: 0, balls: 0 },
+  firstInningsScore: 0,
+  firstInningsWickets: 0,
+  firstInningsBatters: [],
+  firstInningsBowlers: [],
+  firstInningsBalls: 0,
+  firstInningsExtras: 0,
+  bowlingPlayers: [],
   runs: 0,
   wickets: 0,
   balls: 0,
@@ -91,13 +115,29 @@ export const useMatchStore = create<MatchState>((set) => ({
 
   setNextBatter: (batterIdx: number) => set((state: MatchState) => ({
     strikerIdx: batterIdx,
+    partnerships: [...state.partnerships, {
+    batters: [state.battingPlayers[state.strikerIdx].name, state.battingPlayers[state.nonStrikerIdx].name],
+    runs: state.currentPartnership.runs,
+    balls: state.currentPartnership.balls
+  }],
+  currentPartnership: { runs: 0, balls: 0 }
   })),
 
- 
+
 
   isSecondInnings: false,
-   // Inside useMatchStore.ts
-setInnings: (val: boolean) => set({ isSecondInnings: val }),
+  // Inside useMatchStore.ts
+  // Update your setInnings action
+  setInnings: (val) => set((state) => ({
+  isSecondInnings: val,
+  firstInningsScore: state.runs,
+  firstInningsWickets: state.wickets,
+  firstInningsBatters: [...state.battingPlayers],
+  firstInningsBowlers: [...state.bowlers],
+  firstInningsExtras: (state.extras.wide + state.extras.noBall + state.extras.bye + state.extras.legBye),
+  extras: { wide: 0, noBall: 0, bye: 0, legBye: 0 },
+  runs: 0, wickets: 0, balls: 0,
+})),
 
   setDismissal: (batterIdx, type, fielder, bowlerName) => set((state) => {
     const players = [...state.battingPlayers];
@@ -122,45 +162,55 @@ setInnings: (val: boolean) => set({ isSecondInnings: val }),
 
   // Helper to initialize players
   // Define the types clearly in the function signature
-initMatch: (
-  battingSquad: any[], 
-  bowlingSquad: any[], 
-  strikerIdx: number, 
-  nonStrikerIdx: number, 
-  bowlerIdx: number
-) => set({
-  battingPlayers: battingSquad.map((p: any) => ({ // Fixes 'p' error
-    ...p, 
-    runs: 0, 
-    balls: 0, 
-    fours: 0, 
-    sixes: 0, 
-    isOut: false, 
-    dismissal: '' 
-  })),
-  bowlers: bowlingSquad.map((p: any) => ({ // Fixes 'p' error
-    ...p, 
-    overs: 0, 
-    runsConceded: 0, 
-    wickets: 0, 
-    maidens: 0 
-  })),
-  strikerIdx,    // TypeScript now knows these are numbers
-  nonStrikerIdx, 
-  currentBowlerIdx: bowlerIdx,
-  runs: 0, 
-  wickets: 0, 
-  balls: 0, 
-  overHistory: []
-}),
+  initMatch: (
+    battingSquad: any[],
+    bowlingSquad: any[],
+    strikerIdx: number,
+    nonStrikerIdx: number,
+    bowlerIdx: number
+  ) => set({
+    battingPlayers: battingSquad.map((p: any) => ({ // Fixes 'p' error
+      ...p,
+      runs: 0,
+      balls: 0,
+      fours: 0,
+      sixes: 0,
+      isOut: false,
+      dismissal: ''
+    })),
+    bowlers: bowlingSquad.map((p: any) => ({ // Fixes 'p' error
+      ...p,
+      overs: 0,
+      runsConceded: 0,
+      wickets: 0,
+      maidens: 0
+    })),
+    strikerIdx,    // TypeScript now knows these are numbers
+    nonStrikerIdx,
+    currentBowlerIdx: bowlerIdx,
+    runs: 0,
+    wickets: 0,
+    balls: 0,
+    overHistory: []
+  }),
 
   addBall: (ballType, extraRuns = 0) => set((state) => {
     // Clone state to avoid direct mutation
     const newBattingPlayers = [...state.battingPlayers];
     const newBowlers = [...state.bowlers];
     const newExtras = { ...state.extras };
+
+
     let { runs, wickets, balls, strikerIdx, nonStrikerIdx, currentBowlerIdx, overHistory } = state;
 
+    const ballLabel = ballType === 'Wide' ? `W+${runs}` :
+      ballType === 'NoBall' ? `N+${runs}` :
+        ballType === 'Wicket' ? 'W' : `${runs}`;
+    const newBall = {
+      label: ballLabel,
+      runs: runs + (ballType === 'Legal' ? 0 : 1), // Extra run for Wide/NB
+      isLegal: ballType === 'Legal' || ballType === 'Wicket',
+    };
     const currentStriker = newBattingPlayers[strikerIdx];
     const currentBowler = newBowlers[currentBowlerIdx];
 
@@ -216,6 +266,7 @@ initMatch: (
       overHistory = []; // Clear for next over
     }
 
+    const isLegal = ballType === 'Legal' || ballType === 'Wicket';
     return {
       runs,
       wickets,
@@ -225,7 +276,11 @@ initMatch: (
       extras: newExtras,
       strikerIdx,
       nonStrikerIdx,
-      overHistory
+      overHistory,
+      currentPartnership: {
+      runs: state.currentPartnership.runs + runs + (isLegal ? 0 : 1),
+      balls: state.currentPartnership.balls + (isLegal ? 1 : 0)
+    }
     };
   }),
 

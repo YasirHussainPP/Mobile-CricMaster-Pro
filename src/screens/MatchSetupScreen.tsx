@@ -41,8 +41,8 @@ const MatchSetupScreen = ({ navigation }: any) => {
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#0F172A', padding: 20, justifyContent: 'center' },
     card: { backgroundColor: '#1E293B', marginVertical: 5, padding: 10 },
-    input: { width: '48%', backgroundColor: '#1E293B', padding: 10,color: '#FFF', borderRadius: 8, marginBottom: 10, borderWidth: 1, borderColor: '#334155' },
-    label: { color: '#94A3B8', fontSize: 12, marginBottom: 5, fontWeight: 'bold' },
+    input: { width: '100%', backgroundColor: '#1E293B', padding: 10,color: '#FFF', borderRadius: 8, marginBottom: 10, borderWidth: 1, borderColor: '#334155' },
+    label: { color: '#ffffffff', fontSize: 12, marginBottom: 5, fontWeight: 'bold' },
     btn: { marginTop: 20, backgroundColor: '#0DAE7A' },
     glow: {
     shadowColor: "#00f2fe",
