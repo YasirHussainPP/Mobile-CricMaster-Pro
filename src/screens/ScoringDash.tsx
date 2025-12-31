@@ -10,28 +10,29 @@ const ScoringDash = ({ route, navigation }: any) => {
   const [history, setHistory] = useState<any[]>([]);
 
   const saveHistory = useCallback(() => {
-    // Snapshot current state
-    const snapshot = JSON.parse(JSON.stringify({
-      runs: store.runs,
-      wickets: store.wickets,
-      balls: store.balls,
-      strikerIdx: store.strikerIdx,
-      nonStrikerIdx: store.nonStrikerIdx,
-      currentBowlerIdx: store.currentBowlerIdx,
-      overHistory: store.overHistory,
-      battingPlayers: store.battingPlayers,
-      bowlers: store.bowlers,
-      isSecondInnings: store.isSecondInnings,
-      firstInningsScore: store.firstInningsScore
-    }));
+    // Get the absolute current state directly from the store
+    const currentState = useMatchStore.getState();
+
+    const snapshot = {
+      runs: currentState.runs,
+      wickets: currentState.wickets,
+      balls: currentState.balls,
+      strikerIdx: currentState.strikerIdx,
+      nonStrikerIdx: currentState.nonStrikerIdx,
+      currentBowlerIdx: currentState.currentBowlerIdx,
+      overHistory: [...currentState.overHistory], // Shallow copy array
+      battingPlayers: JSON.parse(JSON.stringify(currentState.battingPlayers)), // Deep copy players
+      bowlers: JSON.parse(JSON.stringify(currentState.bowlers)), // Deep copy bowlers
+      isSecondInnings: currentState.isSecondInnings,
+      firstInningsScore: currentState.firstInningsScore
+    };
+
     setHistory(prev => [...prev, snapshot].slice(-10));
-  }, [store]);
+  }, []);
 
   const handleUndo = () => {
     if (history.length === 0) return;
     const lastState = history[history.length - 1];
-
-    // IMPORTANT: useMatchStore.setState is the correct way to revert Zustand
     useMatchStore.setState(lastState);
     setHistory(prev => prev.slice(0, -1));
   };
@@ -61,7 +62,7 @@ const ScoringDash = ({ route, navigation }: any) => {
     const isOverJustFinished = store.balls > 0 &&
       store.balls % 6 === 0 &&
       store.overHistory.length > 0 &&
-      !['WD', 'NB'].includes(store.overHistory[store.overHistory.length - 1].label);
+      !['Wd', 'NB'].includes(store.overHistory[store.overHistory.length - 1].label);
 
 
     if (isOversFinished || isAllOut || targetChased) {
@@ -72,7 +73,9 @@ const ScoringDash = ({ route, navigation }: any) => {
 
 
     // Improved Over End Check
-    if (store.balls > 0 && store.balls % 6 === 0) {
+    const lastBall = store.overHistory[store.overHistory.length - 1];
+    const isExtra = lastBall?.label === 'Wd' || lastBall?.label === 'NB';
+    if (store.balls > 0 && store.balls % 6 === 0 && !isExtra) {
       setTimeout(() => {
         setOverEndModal(true);
       }, 100);
@@ -219,7 +222,7 @@ const ScoringDash = ({ route, navigation }: any) => {
             <Text style={styles.crrText}>CRR: {(store.balls === 0 ? 0 : (store.runs / store.balls) * 6).toFixed(2)}</Text>
           </View>
           <Button mode="outlined" textColor="#F87171" onPress={handleUndo} disabled={history.length === 0}>Undo↪</Button>
-          <IconButton icon="undo-variant" iconColor="#F87171" onPress={handleUndo}  />
+          <IconButton icon="undo-variant" iconColor="#F87171" onPress={handleUndo} disabled={history.length === 0} />
         </View>
         {/* MAIN SCORECARD */}
         <Card style={styles.glowCard}>

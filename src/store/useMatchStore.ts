@@ -113,6 +113,7 @@ export const useMatchStore = create<MatchState>((set) => ({
   firstInningsBalls: 0,
   firstInningsExtras: 0,
   bowlingPlayers: [],
+  history: [] as any[],
   runs: 0,
   wickets: 0,
   balls: 0,
@@ -154,6 +155,8 @@ export const useMatchStore = create<MatchState>((set) => ({
   extras: { wide: 0, noBall: 0, bye: 0, legBye: 0 },
   runs: 0, wickets: 0, balls: 0,
 })),
+
+
 
   setDismissal: (batterIdx, type, fielder, bowlerName) => set((state) => {
     const players = [...state.battingPlayers];
