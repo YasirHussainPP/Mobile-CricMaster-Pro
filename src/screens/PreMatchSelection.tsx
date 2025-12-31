@@ -5,32 +5,43 @@ import { useMatchStore } from '../store/useMatchStore';
 import { getPlayerDisplayName } from '../utils/utils';
 
 const PreMatchSelection = ({ route, navigation }: any) => {
-  const { battingTeam, bowlingTeam } = route.params;
-  const initMatch = useMatchStore((state) => state.initMatch);
+  const { battingTeam, bowlingTeam, isTournament = false, matchData = {}, totalOvers } = route.params || {};
+  
+  if (!battingTeam || !bowlingTeam) {
+    return (
+      <View style={styles.errorContainer}>
+        <Text style={{ color: 'white' }}>Error: Team data not found.</Text>
+        <Button onPress={() => navigation.goBack()}>Go Back</Button>
+      </View>
+    );
+  }
 
+  const initMatch = useMatchStore((state) => state.initMatch);
   const [visible, setVisible] = useState({ striker: false, nonStriker: false, bowler: false });
   const [selections, setSelections] = useState({ striker: 0, nonStriker: 1, bowler: 0 });
 
+  const handleStart = () => {
+    // 1. Initialize the Store
+    initMatch(
+      battingTeam.players,
+      bowlingTeam.players,
+      selections.striker,
+      selections.nonStriker,
+      selections.bowler
+    );
 
-
-
- const handleStart = () => {
-  initMatch(
-    battingTeam.players, 
-    bowlingTeam.players, 
-    selections.striker, 
-    selections.nonStriker, 
-    selections.bowler
-  );
-
-  navigation.navigate('ScoringDash', {
-    battingTeamName: battingTeam.teamName,
-    // ADD THESE TWO LINES BELOW:
-    battingTeam: battingTeam, 
-    bowlingTeam: bowlingTeam,
-    totalOvers: route.params?.totalOvers
-  });
-};
+    // 2. Navigate using the CORRECT route name from App.tsx ('Scoring')
+    navigation.navigate('ScoringDash', {
+      matchId: isTournament ? matchData.id : null,
+      isTournament: isTournament,
+      matchData: matchData,
+      battingTeam: battingTeam,
+      bowlingTeam: bowlingTeam,
+      battingTeamName: battingTeam.name || "Team A", // Fallback for header
+      bowlingTeamName: bowlingTeam.name || "Team B",
+      totalOvers: totalOvers || 5
+    });
+  };
 
   const PlayerPicker = ({ label, value, type }: { label: string; value: number; type: 'striker' | 'nonStriker' | 'bowler' }) => (
     <View style={styles.pickerContainer}>
@@ -43,6 +54,7 @@ const PreMatchSelection = ({ route, navigation }: any) => {
             mode="outlined"
             onPress={() => setVisible({ ...visible, [type]: true })}
             style={styles.dropdownBtn}
+            textColor="#FFF"
             icon="chevron-down"
           >
             {type === 'bowler'
@@ -51,7 +63,6 @@ const PreMatchSelection = ({ route, navigation }: any) => {
           </Button>
         }
       >
-        {/* CRITICAL FIX: Map through the correct squad */}
         {(type === 'bowler' ? bowlingTeam : battingTeam).players.map((p: any, i: number) => (
           <Menu.Item
             key={i}
@@ -71,11 +82,9 @@ const PreMatchSelection = ({ route, navigation }: any) => {
       <Surface style={styles.card} elevation={2}>
         <Text style={styles.header}>MATCH READY</Text>
         <Divider style={styles.divider} />
-
         <PlayerPicker label="STRIKER" value={selections.striker} type="striker" />
         <PlayerPicker label="NON-STRIKER" value={selections.nonStriker} type="nonStriker" />
         <PlayerPicker label="OPENING BOWLER" value={selections.bowler} type="bowler" />
-
         <Button
           mode="contained"
           onPress={handleStart}
@@ -91,6 +100,7 @@ const PreMatchSelection = ({ route, navigation }: any) => {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0F172A', padding: 20, justifyContent: 'center' },
+  errorContainer: { flex: 1, backgroundColor: '#0F172A', justifyContent: 'center', alignItems: 'center' },
   card: { backgroundColor: '#1E293B', padding: 25, borderRadius: 15 },
   header: { color: '#FFF', fontSize: 22, fontWeight: '900', textAlign: 'center', marginBottom: 20 },
   pickerContainer: { marginBottom: 20 },

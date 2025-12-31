@@ -1,11 +1,40 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
-import { Button, Card, Divider, List, Modal, Portal, Provider, RadioButton, Text } from 'react-native-paper';
+import { Button, Card, Divider, IconButton, List, Modal, Portal, Provider, RadioButton, Text } from 'react-native-paper';
 import { useMatchStore } from '../store/useMatchStore';
 import { getPlayerDisplayName } from '../utils/utils';
 
 const ScoringDash = ({ route, navigation }: any) => {
   const store = useMatchStore();
+  // History Stack for Undo
+  const [history, setHistory] = useState<any[]>([]);
+
+  const saveHistory = useCallback(() => {
+    // Snapshot current state
+    const snapshot = JSON.parse(JSON.stringify({
+      runs: store.runs,
+      wickets: store.wickets,
+      balls: store.balls,
+      strikerIdx: store.strikerIdx,
+      nonStrikerIdx: store.nonStrikerIdx,
+      currentBowlerIdx: store.currentBowlerIdx,
+      overHistory: store.overHistory,
+      battingPlayers: store.battingPlayers,
+      bowlers: store.bowlers,
+      isSecondInnings: store.isSecondInnings,
+      firstInningsScore: store.firstInningsScore
+    }));
+    setHistory(prev => [...prev, snapshot].slice(-10));
+  }, [store]);
+
+  const handleUndo = () => {
+    if (history.length === 0) return;
+    const lastState = history[history.length - 1];
+
+    // IMPORTANT: useMatchStore.setState is the correct way to revert Zustand
+    useMatchStore.setState(lastState);
+    setHistory(prev => prev.slice(0, -1));
+  };
 
   // Modal States
   const [extraModal, setExtraModal] = useState<{ visible: boolean, type: 'Wide' | 'NoBall' | null }>({ visible: false, type: null });
@@ -29,22 +58,32 @@ const ScoringDash = ({ route, navigation }: any) => {
     const isAllOut = store.wickets >= 10;
     const isOversFinished = store.balls >= (totalOvers * 6);
     const targetChased = store.isSecondInnings && store.runs > store.firstInningsScore;
-    console.log(`Balls: ${store.balls}, Wickets: ${store.wickets}, AllOut: ${isAllOut}, OversFinished: ${isOversFinished}`);
+    const isOverJustFinished = store.balls > 0 &&
+      store.balls % 6 === 0 &&
+      store.overHistory.length > 0 &&
+      !['WD', 'NB'].includes(store.overHistory[store.overHistory.length - 1].label);
+
 
     if (isOversFinished || isAllOut || targetChased) {
       handleInningsEnd();
       return;
     }
+    // --- Place this inside the ScoringDash component, above the return ---
+
 
     // Improved Over End Check
     if (store.balls > 0 && store.balls % 6 === 0) {
-      // If you are on the web/emulator, alerts can sometimes block state updates.
-      // We use a tiny timeout to ensure the UI is ready.
       setTimeout(() => {
         setOverEndModal(true);
       }, 100);
     }
   }, [store.balls, store.wickets, store.runs]);
+
+  const handleAddBall = (type: 'Legal' | 'Wide' | 'NoBall' | 'Wicket', runs: number) => {
+    saveHistory();
+    store.addBall(type, runs);
+  };
+
 
   const handleInningsEnd = () => {
     setMatchEndModal(true);
@@ -77,31 +116,79 @@ const ScoringDash = ({ route, navigation }: any) => {
     if (secondInningsRuns >= target) {
       return `${route.params.battingTeamName} won by ${10 - store.wickets} wickets`;
     } else if (store.balls >= (route.params.totalOvers * 6) || store.wickets >= 10) {
-      return `${route.params.bowlingTeam.teamName} won by ${store.firstInningsScore - store.runs} runs`;
+      return `${route.params.bowlingTeam.name} won by ${store.firstInningsScore - store.runs} runs`;
     }
     return "Match in Progress";
   };
 
+  // Inside handleFinishMatch in ScoringDash.tsx
+  const handleFinishMatch = () => {
+    // 1. Determine winner name safely
+    const teamAName = route.params.teamA?.name || "Team A";
+    const teamBName = route.params.teamB?.name || "Team B";
+
+    // If 2nd innings score > target, batting team wins. Else bowling team wins.
+    const winner = store.runs > store.firstInningsScore ? teamAName : teamBName;
+    const loser = winner === teamAName ? teamBName : teamAName;
+
+    const result = {
+      matchId: route.params.matchData.id,
+      winner: winner,
+      loser: loser,
+      scoreA: store.isSecondInnings ? store.firstInningsScore : store.runs,
+      ballsA: route.params.totalOvers * 6, // 1st innings balls
+      scoreB: store.isSecondInnings ? store.runs : 0,
+      ballsB: store.balls, // 2nd innings balls
+      teamAName: teamAName,
+      playerStats: [...store.battingPlayers, ...store.bowlers],
+      // FIX: Pass the tournament name back so the header doesn't crash
+      tournamentName: route.params.tournamentName
+    };
+
+    navigation.navigate('TournamentDashboard', { result });
+  };
+
   const getPlayerOfTheMatch = () => {
-    // Combine all players from both teams who participated
-    const battingPerformers = store.battingPlayers.map(p => ({
-      name: p.name,
-      score: (p.runs || 0) + (p.wickets || 0) * 25 // if store tracks both on one object
-    }));
 
-    const bowlingPerformers = store.bowlers.map(b => ({
-      name: b.name,
-      score: (b.runsConceded === 0 && b.overs > 0 ? 10 : 0) + (b.wickets || 0) * 25
-    }));
+    const allPlayers = [
+      ...route.params.battingTeam.players,
+      ...route.params.bowlingTeam.players
+    ];
+    const performanceList = allPlayers.map(player => {
+      const bStat = store.battingPlayers.find(p => p.name === player.name);
+      const bowlStat = store.bowlers.find(b => b.name === player.name);
 
-    const allPerformers = [...battingPerformers, ...bowlingPerformers];
+      let impactScore = 0;
+      if (bStat) {
+        impactScore += (bStat.runs || 0);
 
-    // Find the highest score
-    const pom = allPerformers.reduce((prev, current) =>
-      (prev.score > current.score) ? prev : current
+        const sr = bStat.balls > 0 ? (bStat.runs / bStat.balls) * 100 : 0;
+        if (sr > 150) impactScore += 10;
+
+        if (bStat.runs >= 50) impactScore += 25;
+        if (bStat.runs >= 100) impactScore += 50;
+      }
+
+
+      if (bowlStat) {
+        impactScore += (bowlStat.wickets || 0) * 25;
+
+        const totalBalls = (Math.floor(bowlStat.overs || 0) * 6) + ((bowlStat.overs || 0) % 1 * 10);
+        const economy = totalBalls >= 6 ? (bowlStat.runsConceded / (totalBalls / 6)) : 10;
+
+        if (totalBalls >= 6 && economy < 6) impactScore += 15;
+
+        if (bowlStat.wickets >= 3) impactScore += 20;
+      }
+
+      return { name: player.name, totalScore: impactScore };
+    });
+
+    const topPerformer = performanceList.reduce((prev, current) =>
+      (prev.totalScore > current.totalScore) ? prev : current
     );
 
-    return pom.name;
+    return topPerformer.name;
   };
   const getRequiredRunRate = () => {
     const runsNeeded = (store.firstInningsScore + 1) - store.runs;
@@ -124,6 +211,16 @@ const ScoringDash = ({ route, navigation }: any) => {
   return (
     <Provider>
       <View style={styles.container}>
+        <View style={styles.headerRow}>
+          <View>
+            <Text style={styles.matchTitle}>
+              {(route.params.battingTeamName || "MATCH").toUpperCase()}
+            </Text>
+            <Text style={styles.crrText}>CRR: {(store.balls === 0 ? 0 : (store.runs / store.balls) * 6).toFixed(2)}</Text>
+          </View>
+          <Button mode="outlined" textColor="#F87171" onPress={handleUndo} disabled={history.length === 0}>Undo↪</Button>
+          <IconButton icon="undo-variant" iconColor="#F87171" onPress={handleUndo}  />
+        </View>
         {/* MAIN SCORECARD */}
         <Card style={styles.glowCard}>
           <Card.Content>
@@ -177,21 +274,37 @@ const ScoringDash = ({ route, navigation }: any) => {
 
         {/* CONTROLS */}
         <View style={styles.actionSection}>
+
           <View style={styles.runRow}>
+
             {[0, 1, 2, 3, 4, 6].map(num => (
+
               <TouchableOpacity key={num} style={[styles.runBtn, { backgroundColor: num >= 4 ? '#1E40AF' : '#334155' }]} onPress={() => store.addBall('Legal', num)}>
+
                 <Text style={styles.runBtnText}>{num}</Text>
+
               </TouchableOpacity>
+
             ))}
+
           </View>
+
+
 
           <View style={styles.extrasRow}>
+
             <Button mode="contained" buttonColor="#B45309" onPress={() => setExtraModal({ visible: true, type: 'Wide' })} style={styles.flexBtn}>WIDE</Button>
+
             <Button mode="contained" buttonColor="#B91C1C" onPress={() => setWicketModal(true)} style={styles.flexBtn}>WICKET</Button>
+
             <Button mode="contained" buttonColor="#1D4ED8" onPress={() => setExtraModal({ visible: true, type: 'NoBall' })} style={styles.flexBtn}>NB</Button>
+
           </View>
 
+
+
           <Button mode="outlined" textColor="#FFF" style={{ marginTop: 20, borderColor: '#334155ff' }} onPress={() => navigation.navigate('FullScorecard')}>VIEW FULL SCORECARD</Button>
+
         </View>
 
         {/* PORTALS (MODALS) */}
@@ -337,6 +450,15 @@ const ScoringDash = ({ route, navigation }: any) => {
                 >
                   VIEW FULL SCORECARD
                 </Button>
+
+                {/* <Button
+                  mode="contained"
+                  buttonColor="#10B981" // Green button for saving
+                  style={{ marginTop: 10, width: '100%' }}
+                  onPress={handleFinishMatch}
+                >
+                  SAVE & RETURN TO DASHBOARD
+                </Button> */}
               </View>
             )}
           </Modal>
@@ -408,6 +530,12 @@ const styles = StyleSheet.create({
     color: '#94A3B8',
     fontSize: 12,
     fontWeight: 'bold',
+  },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
   },
 });
 

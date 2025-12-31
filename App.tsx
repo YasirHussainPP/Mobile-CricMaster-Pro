@@ -10,7 +10,10 @@ import MatchSetupScreen from './src/screens/MatchSetupScreen';
 import PreMatchSelection from './src/screens/PreMatchSelection';
 import QuickMatchScreen from './src/screens/QuickMatchScreen';
 import ScoringDash from './src/screens/ScoringDash';
+import TeamSquadEntryScreen from './src/screens/TeamSquadEntryScreen';
 import TossScreen from './src/screens/TossScreen';
+import TournamentDashboard from './src/screens/TournamentDashboard';
+import TournamentSetupScreen from './src/screens/TournamentSetupScreen';
 
 // This creates the Stack object
 const Stack = createStackNavigator();
@@ -22,7 +25,7 @@ export default function App() {
                 <Stack.Navigator
                     initialRouteName="Home"
                     screenOptions={{
-                        headerStyle: { backgroundColor: '#1E293B' },
+                        headerStyle: { backgroundColor: '#4f668bff' },
                         headerTintColor: '#FFF',
                         headerTitleStyle: { fontWeight: 'bold' },
                     }}
@@ -42,6 +45,9 @@ export default function App() {
                     <Stack.Screen name="PreMatch" component={PreMatchSelection} options={{ title: 'SELECT PLAYERS' }} />
                     <Stack.Screen name="ScoringDash" component={ScoringDash} options={{ title: 'LIVE SCORE' }} />
                     <Stack.Screen name="FullScorecard" component={FullScorecard} options={{ title: 'FULL SCORECARD' }} />
+                    <Stack.Screen name="TournamentSetup" component={TournamentSetupScreen} options={{ title: 'TOURNAMENT SETUP' }} />
+                    <Stack.Screen name="TeamSquadEntry" component={TeamSquadEntryScreen} options={{ title: 'TEAM SQUAD ENTRY' }} />
+                    <Stack.Screen name="TournamentDashboard" component={TournamentDashboard} options={{ title: 'TOURNAMENT DASHBOARD' }} />
                 </Stack.Navigator>
             </NavigationContainer>
         </PaperProvider>

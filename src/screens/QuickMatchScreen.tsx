@@ -38,23 +38,32 @@ const QuickMatchScreen = ({ navigation, route }: any) => {
   console.log(` TotalOvers: ${route.params?.totalOvers}`);
 
   const handleNext = () => {
-    // Extract from params correctly
     const { matchTitle, totalOvers, teamAData } = route.params ?? {};
 
     if (!isTeamB) {
       navigation.push('QuickMatch', {
         isTeamB: true,
-        teamAData: { teamName, players },
-        matchTitle: matchTitle, 
-        totalOvers: totalOvers  
-      });
-    } else {
-      navigation.navigate('Toss', {
-        teamA: teamAData,
-        teamB: { teamName, players },
+        teamAData: {
+          name: teamName, 
+          players: players
+        },
         matchTitle: matchTitle,
         totalOvers: totalOvers
       });
+    } else {
+      navigation.navigate('Toss', {
+        teamA: teamAData, // This will now have the { name, players } structure
+        teamB: {
+          name: teamName,
+          players: players
+        },
+        matchTitle: matchTitle,
+        totalOvers: totalOvers,
+        isTournament: false,
+        matchData: { id: Date.now().toString() }
+      });
+
+      console.log(`Navigating to Toss with Team A: ${teamAData?.name} and Team B: ${teamName}`);
     }
   };
 

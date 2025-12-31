@@ -69,6 +69,8 @@ interface MatchState {
 
   };
 
+  
+
 
 
 
@@ -82,7 +84,21 @@ interface MatchState {
   setDismissal: (batterIdx: number, type: string, fielder?: string, bowlerName?: string) => void;
   isSecondInnings: boolean;
   setInnings: (isSecond: boolean) => void;
+  
 
+}
+interface Team {
+  id: string;
+  name: string;
+  players: { name: string; isCaptain: boolean; isWK: boolean }[];
+  stats: { won: number; lost: number; points: number; nrr: number };
+}
+
+interface TournamentStore {
+  tournamentName: string;
+  teams: Team[];
+  fixtures: any[]; // Automatically generated match list
+  // ... existing match state
 }
 
 // 3. Create the Store
@@ -185,6 +201,7 @@ export const useMatchStore = create<MatchState>((set) => ({
       wickets: 0,
       maidens: 0
     })),
+    
     strikerIdx,    // TypeScript now knows these are numbers
     nonStrikerIdx,
     currentBowlerIdx: bowlerIdx,
@@ -193,6 +210,8 @@ export const useMatchStore = create<MatchState>((set) => ({
     balls: 0,
     overHistory: []
   }),
+
+  setFullState: (newState: any) => set(() => ({ ...newState })),
 
   addBall: (ballType, extraRuns = 0) => set((state) => {
     // Clone state to avoid direct mutation
